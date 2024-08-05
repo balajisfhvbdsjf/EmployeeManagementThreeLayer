@@ -1,5 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
-using EmployeeManagement.Domain.Entities;
+﻿using EmployeeManagement.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace EmployeeManagement.Infrastructure.Data
 {
@@ -11,5 +11,6 @@ namespace EmployeeManagement.Infrastructure.Data
         }
 
         public DbSet<Employee> Employees { get; set; }
+        public DbSet<User> Users { get; set; }
     }
 }
