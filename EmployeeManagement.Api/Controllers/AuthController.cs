@@ -18,10 +18,17 @@ namespace EmployeeManagement.Api.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register(User user)
+        public async Task<IActionResult> Register(User user, [FromQuery] string otp)
         {
-            var registeredUser = await _authService.RegisterAsync(user);
+            var registeredUser = await _authService.RegisterAsync(user, otp);
             return Ok(registeredUser);
+        }
+
+        [HttpPost("send-otp")]
+        public async Task<IActionResult> SendOtp(string email)
+        {
+            var otp = await _authService.SendOtpAsync(email);
+            return Ok(new { Otp = otp });
         }
 
         [HttpPost("login")]

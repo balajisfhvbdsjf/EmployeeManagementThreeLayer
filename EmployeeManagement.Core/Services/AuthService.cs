@@ -1,39 +1,57 @@
-﻿using BCrypt.Net; // For BCrypt functionality
-using EmployeeManagement.Domain.Entities;
+﻿using EmployeeManagement.Domain.Entities;
 using EmployeeManagement.Domain.Models;
 using EmployeeManagement.Infrastructure.Repositories;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 using System;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
-
+using BCrypt.Net;
 
 namespace EmployeeManagement.Core.Services
 {
     public class AuthService : IAuthService
     {
         private readonly IUserRepository _userRepository;
+        private readonly IEmailService _emailService;
         private readonly string _secretKey;
+        private readonly Dictionary<string, (string otp, DateTime expiration)> _otpStore;
 
-        public AuthService(IUserRepository userRepository, IConfiguration configuration)
+        public AuthService(IUserRepository userRepository, IEmailService emailService, IConfiguration configuration)
         {
             _userRepository = userRepository;
+            _emailService = emailService;
             _secretKey = configuration["Jwt:Key"];
+            _otpStore = new Dictionary<string, (string otp, DateTime expiration)>();
         }
 
-        public async Task<User> RegisterAsync(User user)
+        public async Task<User> RegisterAsync(User user, string otp)
         {
-            user.Password = BCrypt.Net.BCrypt.HashPassword(user.Password); // Hash the password
-            return await _userRepository.AddUserAsync(user);
+            if (_otpStore.TryGetValue(user.Username, out var otpInfo) &&
+                otpInfo.otp == otp && otpInfo.expiration > DateTime.UtcNow)
+            {
+                user.Password = BCrypt.Net.BCrypt.HashPassword(user.Password);
+                _otpStore.Remove(user.Username);
+                return await _userRepository.AddUserAsync(user);
+            }
+            throw new InvalidOperationException("Invalid or expired OTP.");
+        }
+
+        public async Task<string> SendOtpAsync(string email)
+        {
+            var otp = GenerateOtp();
+            await _emailService.SendOtpAsync(email, otp);
+            // Save OTP with an expiration time ( 10 minutes)
+            _otpStore[email] = (otp, DateTime.UtcNow.AddMinutes(10));
+            return otp;
         }
 
         public async Task<string> LoginAsync(LoginRequest loginRequest)
         {
             var user = await _userRepository.GetUserByUsernameAsync(loginRequest.Username);
-            if (user == null || !BCrypt.Net.BCrypt.Verify(loginRequest.Password, user.Password)) // Verify the password
+            if (user == null || !BCrypt.Net.BCrypt.Verify(loginRequest.Password, user.Password))
             {
                 return null;
             }
@@ -52,6 +70,12 @@ namespace EmployeeManagement.Core.Services
             };
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
+        }
+
+        private string GenerateOtp()
+        {
+            var random = new Random();
+            return random.Next(100000, 999999).ToString();
         }
     }
 }
